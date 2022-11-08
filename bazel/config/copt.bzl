@@ -1,6 +1,7 @@
 ASYNC_SIMPLE_COPTS = select({
     "//bazel/config:msvc_compiler": [
         "/std:c++20",
+        "/Zc:__cplusplus",
         "/await:strict",
         "/EHa"
     ],
