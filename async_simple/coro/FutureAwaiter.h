@@ -17,34 +17,32 @@
 #define ASYNC_SIMPLE_CORO_FUTURE_AWAITER_H
 
 #include "async_simple/Future.h"
+#include "async_simple/coro/Traits.h"
 #include "async_simple/experimental/coroutine.h"
 
 namespace async_simple {
-namespace coro {
 
 template <typename T>
-class FutureAwaiter {
-public:
-    explicit FutureAwaiter(Future<T>&& future) : _future(std::move(future)) {}
-    FutureAwaiter(FutureAwaiter&& rhs) : _future(std::move(rhs._future)) {}
-    FutureAwaiter(FutureAwaiter&) = delete;
-
-    bool await_ready() { return _future.hasResult(); }
-    void await_suspend(CoroHandle<> continuation) {
-        _future.setContinuation(
-            [continuation](Try<T>&& t) mutable { continuation.resume(); });
-    }
-    T await_resume() { return std::move(_future.value()); }
-
-private:
-    Future<T> _future;
-};
-}  // namespace coro
-
-template <typename T>
-auto operator co_await(T&& future) requires IsFuture<std::decay_t<T>>::value {
-    return coro::FutureAwaiter(std::move(future));
+auto operator co_await(Future<T> future) noexcept
+    requires(!std::is_reference_v<T>) {
+    struct FutureAwaiter : Future<T> {
+        bool await_ready() const noexcept { return this->hasResult(); }
+        void await_suspend(coro::CoroHandle<> continuation) {
+            this->setContinuation(
+                [continuation](Try<T>&& t) mutable { continuation.resume(); });
+        }
+        T await_resume() { return std::move(this->value()); }
+    };
+    return FutureAwaiter{std::move(future)};
 }
+
+namespace coro::detail {
+
+static_assert(HasGlobalCoAwaitOperator<Future<int>>);
+static_assert(HasGlobalCoAwaitOperator<Future<int>&&>);
+static_assert(!HasGlobalCoAwaitOperator<Future<int>&>);
+
+}  // namespace coro::detail
 
 }  // namespace async_simple
 
